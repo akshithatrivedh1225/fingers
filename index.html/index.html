@@ -1,0 +1,1536 @@
+  <!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Laser Hands — Draw with Light</title>
+<meta name="description" content="Turn your fingertips into lasers. Hand-tracked light drawing that runs entirely in your browser." />
+<meta name="theme-color" content="#FCF8F1" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.3' stop-color='%23E8A87C'/%3E%3Cstop offset='1' stop-color='%234F7CFF' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23fff'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+/* ============================================================
+   Laser Hands — design tokens
+   ============================================================ */
+:root {
+  --bg-0: #FCF8F1;
+  --bg-1: #F3E9DB;
+  --ink: #3A2E22;
+  --muted: #8A7B6C;
+  --line: rgba(58, 46, 34, 0.10);
+  --accent: #4F7CFF;
+  --cyan: #22D3EE;
+  --violet: #A78BFA;
+  --void: #07080D;
+  --font: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg-0);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button { font-family: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+
+::selection { background: rgba(232, 162, 110, 0.22); }
+
+/* ============================================================
+   LANDING
+   ============================================================ */
+#landing {
+  position: fixed; inset: 0; z-index: 10;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #FFFEFB 0%, rgba(255,254,251,0) 55%),
+    radial-gradient(70% 60% at 12% 108%, rgba(232, 162, 110, 0.15) 0%, rgba(232,162,110,0) 60%),
+    radial-gradient(60% 55% at 92% 96%, rgba(229, 143, 156, 0.13) 0%, rgba(229,143,156,0) 62%),
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+}
+#landing.entering { animation: landingIn 0.8s var(--ease-out) both; }
+@keyframes landingIn { from { opacity: 0; } to { opacity: 1; } }
+
+#dust {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  transition: opacity 0.75s var(--ease-io), transform 0.75s var(--ease-io);
+}
+
+.hero {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 0 24px;
+  transition: opacity 0.6s var(--ease-io), transform 0.6s var(--ease-io), filter 0.6s var(--ease-io);
+}
+
+#landing.leaving .hero { opacity: 0; transform: translateY(-18px); filter: blur(6px); }
+#landing.leaving #dust { opacity: 0.25; transform: scale(0.94); }
+
+.title {
+  font-size: clamp(58px, 15vw, 168px);
+  font-weight: 600;
+  letter-spacing: 0.06em; text-indent: 0.06em;
+  line-height: 1.02;
+  color: #0A0A0A;
+  text-shadow: 0 2px 34px rgba(232, 162, 110, 0.22);
+  animation: floaty 8.5s var(--ease-io) infinite;
+  user-select: none;
+}
+.title span {
+  display: inline-block;
+  opacity: 0;
+  animation: letterIn 0.85s var(--ease-out) both;
+  animation-delay: calc(0.22s + var(--i) * 0.055s);
+}
+
+@keyframes letterIn {
+  from { opacity: 0; transform: translateY(22px) rotate(2deg); }
+  to   { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-6px) rotate(0.55deg); }
+}
+/* ---------- ENTER button ---------- */
+.start {
+  position: relative; overflow: hidden;
+  margin-top: 54px;
+  min-width: 232px; height: 64px;
+  padding: 0 44px 0 50px; /* extra left compensates letter-spacing */
+  border: 1px solid rgba(58, 46, 34, 0.13);
+  border-radius: 15px;
+  background: linear-gradient(180deg, #FFFDF8 0%, #FBF3E7 100%);
+  box-shadow:
+    0 10px 34px rgba(58, 46, 34, 0.12),
+    0 2px 6px rgba(58, 46, 34, 0.06),
+    inset 0 1px 0 #FFFFFF;
+  color: var(--ink);
+  font-size: 14px; font-weight: 600;
+  letter-spacing: 0.42em;
+  opacity: 0; animation: startIn 0.85s var(--ease-out) 0.55s both;
+  transition:
+    transform 0.45s var(--ease-out),
+    box-shadow 0.45s var(--ease-out),
+    border-color 0.45s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+@keyframes startIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.start::after { /* light sweep */
+  content: ''; position: absolute; top: 0; bottom: 0; left: -70%; width: 44%;
+  background: linear-gradient(105deg, transparent 0%, rgba(232,162,110,0.16) 45%, rgba(255,255,255,0.75) 52%, rgba(233,196,106,0.12) 60%, transparent 100%);
+  transform: skewX(-18deg);
+  transition: left 0.75s var(--ease-out);
+  pointer-events: none;
+}
+.start:hover::after { left: 130%; }
+.start:hover {
+  transform: translateY(-2px) scale(1.028) rotate(-0.45deg);
+  border-color: rgba(214, 150, 90, 0.5);
+  box-shadow:
+    0 18px 52px rgba(58, 46, 34, 0.15),
+    0 6px 18px rgba(232, 162, 110, 0.22),
+    inset 0 1px 0 #FFFFFF;
+}
+.start:active { transform: translateY(1px) scale(0.965); transition-duration: 0.12s; }
+.start:focus-visible { outline: 2px solid #C8894D; outline-offset: 4px; }
+.start:not(:hover):not(:active) { animation: startIn 0.85s var(--ease-out) 0.55s both, idleWiggle 6.8s ease-in-out 1.9s infinite; }
+@keyframes idleWiggle {
+  0%, 84%, 100% { transform: none; }
+  88%  { transform: translateY(-2.5px) rotate(0.7deg); }
+  92%  { transform: translateY(0px)   rotate(-0.5deg); }
+  96%  { transform: translateY(-0.5px) rotate(0.2deg); }
+}
+
+/* ---------- launch flash ---------- */
+#flash {
+  position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 46%,
+    rgba(255,255,255,0.95) 0%, rgba(232,162,110,0.34) 36%,
+    rgba(233,196,106,0.12) 55%, transparent 72%);
+}
+#flash.go { animation: flashPulse 0.95s var(--ease-out) forwards; }
+@keyframes flashPulse {
+  0%   { opacity: 0; transform: scale(0.22); }
+  28%  { opacity: 0.95; }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+
+/* ============================================================
+   EXPERIENCE
+   ============================================================ */
+#experience {
+  position: fixed; inset: 0; z-index: 20;
+  background: var(--void);
+}
+#cam {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror — natural selfie motion */
+  filter: saturate(1.06) contrast(1.03) brightness(1.0);
+  opacity: 0; transition: opacity 0.9s var(--ease-io);
+}
+#experience.on #cam { opacity: 1; }
+#fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(130% 130% at 50% 50%, transparent 52%, rgba(4, 5, 10, 0.46) 100%);
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  position: absolute; z-index: 6;
+  top: max(18px, env(safe-area-inset-top)); left: 22px; right: 22px;
+  display: flex; align-items: center; justify-content: space-between;
+  opacity: 0; transform: translateY(-8px);
+  transition: opacity 0.7s var(--ease-out) 0.35s, transform 0.7s var(--ease-out) 0.35s;
+  pointer-events: none;
+}
+#experience.live #hud { opacity: 1; transform: none; pointer-events: auto; }
+
+.hud-left { display: flex; align-items: center; gap: 11px; }
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(255,255,255,0.28);
+  transition: background 0.4s;
+}
+.live-dot.on {
+  background: var(--cyan);
+  box-shadow: 0 0 10px 2px rgba(34, 211, 238, 0.65);
+  animation: dotPulse 1.8s ease-in-out infinite;
+}
+@keyframes dotPulse { 0%,100% { box-shadow: 0 0 8px 1px rgba(34,211,238,0.5); } 50% { box-shadow: 0 0 14px 4px rgba(34,211,238,0.85); } }
+
+.hud-right { display: flex; align-items: center; gap: 10px; }
+
+.chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 38px; padding: 0 17px;
+  border-radius: 11px;
+  background: rgba(9, 11, 18, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.24em;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.4);
+  transition: transform 0.28s var(--ease-out), background 0.28s, border-color 0.28s, box-shadow 0.28s;
+  -webkit-tap-highlight-color: transparent;
+}
+.chip:hover {
+  background: rgba(14, 17, 27, 0.68);
+  border-color: rgba(255, 255, 255, 0.26);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+}
+.chip:active { transform: scale(0.95); transition-duration: 0.1s; }
+.chip:focus-visible { outline: 1.5px solid var(--cyan); outline-offset: 3px; }
+.chip.pulse { animation: chipPulse 0.45s var(--ease-out); }
+@keyframes chipPulse { 0% { transform: scale(1); } 35% { transform: scale(0.93); background: rgba(34,211,238,0.25); } 100% { transform: scale(1); } }
+
+.dots { display: inline-flex; align-items: center; gap: 5px; }
+.dots i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+
+/* ---------- mode pill + hint ---------- */
+.mode-pill {
+  position: absolute; z-index: 6; left: 22px; bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 9px;
+  height: 34px; padding: 0 15px;
+  border-radius: 10px;
+  background: rgba(9, 11, 18, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.26em;
+  color: rgba(255, 255, 255, 0.75);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.7s var(--ease-out) 0.55s, transform 0.7s var(--ease-out) 0.55s;
+  pointer-events: none; white-space: nowrap;
+}
+#experience.live .mode-pill { opacity: 1; transform: none; }
+.pill-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.3); transition: background 0.3s, box-shadow 0.3s; }
+
+.hint {
+  position: absolute; z-index: 6;
+  left: 50%; bottom: max(30px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.3em; text-indent: 0.3em;
+  color: rgba(255, 255, 255, 0.62);
+  text-shadow: 0 1px 16px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  opacity: 0; transition: opacity 0.6s var(--ease-io);
+  pointer-events: none;
+}
+.hint.show { opacity: 1; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 8;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(85% 70% at 50% 38%, #10131D 0%, var(--void) 70%);
+  transition: opacity 0.85s var(--ease-io);
+}
+#boot.hide { opacity: 0; pointer-events: none; }
+.boot-inner { text-align: center; padding: 0 24px; }
+
+.ring { position: relative; width: 78px; height: 78px; margin: 0 auto 32px; }
+.ring i {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: var(--cyan);
+  border-right-color: rgba(79, 124, 255, 0.65);
+  animation: spin 1.05s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.45));
+}
+.ring i.rev {
+  inset: 8px;
+  border-top-color: rgba(167, 139, 250, 0.75);
+  border-right-color: transparent;
+  animation: spinRev 1.7s linear infinite;
+}
+.ring b {
+  position: absolute; left: 50%; top: 50%;
+  width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 20px 5px rgba(34, 211, 238, 0.7);
+  animation: corePulse 1.5s ease-in-out infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spinRev { to { transform: rotate(-360deg); } }
+@keyframes corePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 16px 4px rgba(34,211,238,0.55); }
+  50%      { transform: scale(1.5); box-shadow: 0 0 26px 8px rgba(34,211,238,0.9); }
+}
+
+.boot-title {
+  font-size: clamp(12px, 2vw, 14.5px); font-weight: 600;
+  letter-spacing: 0.44em; text-indent: 0.44em;
+  background: linear-gradient(100deg, rgba(255,255,255,0.55) 20%, #FFFFFF 42%, rgba(34,211,238,0.95) 55%, rgba(255,255,255,0.55) 75%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: #fff;
+  animation: shimmer 2.6s linear infinite;
+}
+@keyframes shimmer { from { background-position: 130% 0; } to { background-position: -90% 0; } }
+
+.boot-status {
+  margin-top: 15px;
+  font-size: 10px; font-weight: 400;
+  letter-spacing: 0.3em; text-indent: 0.3em;
+  color: rgba(255, 255, 255, 0.42);
+  transition: opacity 0.3s;
+}
+
+/* ---------- error ---------- */
+.error-inner {
+  max-width: 480px; text-align: center; padding: 0 28px;
+  animation: errIn 0.6s var(--ease-out) both;
+}
+@keyframes errIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+.error-icon {
+  width: 46px; height: 46px; margin: 0 auto 26px; display: block;
+  color: rgba(255, 255, 255, 0.85);
+  filter: drop-shadow(0 0 16px rgba(255, 95, 210, 0.25));
+}
+.error-inner h2 {
+  font-size: 21px; font-weight: 600; letter-spacing: 0.045em;
+  color: rgba(255, 255, 255, 0.95);
+}
+.error-inner > p {
+  margin-top: 14px;
+  font-size: 14px; font-weight: 300; line-height: 1.75;
+  color: rgba(255, 255, 255, 0.66);
+}
+.error-inner ul {
+  margin: 22px 0 0; list-style: none;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.error-inner li {
+  position: relative; padding-left: 20px;
+  font-size: 12.5px; font-weight: 300; line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55); text-align: left;
+}
+.error-inner li::before {
+  content: ''; position: absolute; left: 2px; top: 7px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--cyan); box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+.error-actions {
+  margin-top: 34px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; flex-wrap: wrap;
+}
+.btn-primary {
+  height: 46px; padding: 0 34px;
+  border-radius: 12px; border: none;
+  background: #FFFFFF; color: #0B0D13;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.26em; text-indent: 0.26em;
+  transition: transform 0.3s var(--ease-out), box-shadow 0.3s, opacity 0.3s;
+  box-shadow: 0 10px 34px rgba(255, 255, 255, 0.14);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 44px rgba(255,255,255,0.22), 0 0 24px rgba(79,124,255,0.25); }
+.btn-primary:active { transform: scale(0.96); transition-duration: 0.1s; }
+.btn-ghost {
+  height: 46px; padding: 0 24px;
+  display: inline-flex; align-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent; color: rgba(255, 255, 255, 0.78);
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.22em; text-indent: 0.22em;
+  text-decoration: none;
+  transition: border-color 0.3s, color 0.3s, transform 0.3s var(--ease-out), background 0.3s;
+}
+.btn-ghost:hover { border-color: rgba(255, 255, 255, 0.45); color: #fff; transform: translateY(-2px); background: rgba(255,255,255,0.05); }
+.btn-ghost:active { transform: scale(0.96); }
+
+/* ---------- exit veil ---------- */
+#veil {
+  position: absolute; inset: 0; z-index: 30;
+  background: var(--void);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.6s var(--ease-io);
+}
+#veil.on { opacity: 1; }
+
+/* ============================================================
+   RESPONSIVE + MOTION PREFERENCES
+   ============================================================ */
+@media (max-width: 720px) {
+  .chip { height: 36px; padding: 0 13px; letter-spacing: 0.18em; }
+  .mode-pill { left: 14px; bottom: 14px; }
+  .hint { font-size: 9px; bottom: 62px; }
+  #hud { left: 14px; right: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title, .start:not(:hover):not(:active) { animation: none; }
+  .title span { animation-duration: 0.01s; animation-delay: 0s; }
+  .start { animation-duration: 0.01s; animation-delay: 0s; }
+}
+</style>
+</head>
+
+<body>
+<noscript>
+  <div style="display:grid;place-items:center;height:100vh;font-family:sans-serif;color:#14161B;background:#FCF8F1;">
+    Laser Hands needs JavaScript to run. Please enable it and reload.
+  </div>
+</noscript>
+
+<!-- ================= LANDING ================= -->
+<section id="landing" aria-label="Landing">
+  <canvas id="dust"></canvas>
+
+  <main class="hero">
+    <h1 class="title" aria-label="WELCOME">
+      <span style="--i:0">W</span><span style="--i:1">E</span><span style="--i:2">L</span><span style="--i:3">C</span><span style="--i:4">O</span><span style="--i:5">M</span><span style="--i:6">E</span>
+    </h1>
+    <button id="start" class="start" type="button">ENTER</button>
+  </main>
+</section>
+
+<div id="flash"></div>
+
+<!-- ================= EXPERIENCE ================= -->
+<section id="experience" hidden aria-label="Laser experience">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="fx"></canvas>
+  <div class="vignette"></div>
+
+  <header id="hud">
+    <div class="hud-left">
+      <span id="liveDot" class="live-dot"></span>
+    </div>
+    <div class="hud-right">
+      <button id="paletteBtn" class="chip" type="button" title="Change color palette (P)" aria-label="Change color palette">
+        <span class="dots" id="paletteDots"></span>
+      </button>
+      <button id="clearBtn" class="chip" type="button" title="Clear drawing (C)">CLEAR</button>
+      <button id="exitBtn" class="chip" type="button" title="Exit (Esc)">EXIT</button>
+    </div>
+  </header>
+
+  <div class="mode-pill">
+    <span class="pill-dot" id="pillDot"></span>
+    <span id="pillText">AWAITING HAND</span>
+  </div>
+
+  <div id="hint" class="hint"></div>
+
+  <!-- boot / loading overlay -->
+  <div id="boot" class="overlay">
+    <div class="boot-inner">
+      <div class="ring"><i></i><i class="rev"></i><b></b></div>
+      <h2 class="boot-title">INITIALIZING LASER SYSTEM</h2>
+      <p class="boot-status" id="bootStatus">PREPARING CAMERA</p>
+    </div>
+  </div>
+
+  <!-- error overlay -->
+  <div id="error" class="overlay" hidden>
+    <div class="error-inner">
+      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14.5 4h-5L8 6.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1v-11a1 1 0 0 0-1-1H16L14.5 4z"/>
+        <circle cx="12" cy="12.5" r="3.2"/>
+        <line x1="4" y1="3" x2="20" y2="21"/>
+      </svg>
+      <h2 id="errTitle">Camera access is required</h2>
+      <p id="errMsg"></p>
+      <ul id="errHints"></ul>
+      <div class="error-actions">
+        <button id="retryBtn" class="btn-primary" type="button">TRY&nbsp;AGAIN</button>
+        <a id="newTabBtn" class="btn-ghost" href="#" target="_blank" rel="noreferrer" hidden>OPEN&nbsp;IN&nbsp;NEW&nbsp;TAB</a>
+        <button id="backBtn" class="btn-ghost" type="button">BACK&nbsp;TO&nbsp;START</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="veil"></div>
+</section>
+
+<script type="module">
+/* ============================================================
+   Laser Hands — single-file engine
+   Landing → transition → camera + MediaPipe hand tracking →
+   laser drawing (1 finger) / laser web (2+ fingers)
+   ============================================================ */
+
+/* ---------- tiny helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const RGB_CACHE = new Map();
+function rgbOf(hex) {
+  let c = RGB_CACHE.get(hex);
+  if (!c) {
+    c = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+    RGB_CACHE.set(hex, c);
+  }
+  return c;
+}
+
+/* ---------- constants ---------- */
+const PALETTES = [
+  { name: 'AURORA',   colors: ['#22D3EE', '#4F7CFF', '#A78BFA', '#FF5FD2', '#FFD84D'] },
+  { name: 'SPECTRUM', colors: ['#00F5D4', '#00B3FF', '#7C5CFF', '#FF4F9A', '#C8FF4D'] },
+  { name: 'SOLARIS',  colors: ['#5CE1E6', '#5C9DFF', '#C86BFF', '#FF5F9E', '#FFBE3D'] },
+];
+
+const MP_JS    = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
+const MP_WASM  = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
+const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+const TIP_IDS = [4, 8, 12, 16, 20];   // thumb → pinky fingertips
+const MCP_IDS = [2, 5, 9, 13, 17];
+const PIP_IDS = [3, 6, 10, 14, 18];
+
+const TRAIL_LIFE   = 60000;  // ms a drawn stroke stays visible
+const MAX_TRAIL    = 2600;   // hard cap on stored points
+const MAX_RENDER   = 1000;   // max segments rendered per frame
+const HAND_TIMEOUT = 500;    // ms without detection → drop hand
+
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FRAMED = window.self !== window.top;
+
+/* ============================================================
+   1€ filter — jitter-free but responsive landmark smoothing
+   ============================================================ */
+class OneEuroFilter {
+  constructor(minCutoff = 1.3, beta = 4.0, dCutoff = 1.0) {
+    this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff;
+    this.hatX = null; this.hatDx = 0; this.lastT = null;
+  }
+  static alpha(cutoff, dt) {
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / dt);
+  }
+  filter(x, t) {
+    if (this.hatX === null || this.lastT === null) { this.hatX = x; this.lastT = t; return x; }
+    const dt = clamp((t - this.lastT) / 1000, 1e-3, 0.1);
+    const dx = (x - this.hatX) / dt;
+    const aD = OneEuroFilter.alpha(this.dCutoff, dt);
+    this.hatDx = aD * dx + (1 - aD) * this.hatDx;
+    const cutoff = this.minCutoff + this.beta * Math.abs(this.hatDx);
+    const a = OneEuroFilter.alpha(cutoff, dt);
+    this.hatX = a * x + (1 - a) * this.hatX;
+    this.lastT = t;
+    return this.hatX;
+  }
+}
+
+/* ============================================================
+   Landing dust — slow rising light particles on ivory
+   ============================================================ */
+const Dust = (() => {
+  const canvas = $('dust');
+  const ctx = canvas.getContext('2d');
+  const COLORS = ['#E8A87C', '#E9C46A', '#E0909E', '#A9B8E8'];
+  let raf = 0, running = false, w = 0, h = 0, lastT = 0;
+  let dots = [], streaks = [], blobs = [];
+
+  function sprite(color, size) {
+    const s = document.createElement('canvas');
+    s.width = s.height = size;
+    const g = s.getContext('2d');
+    const r = size / 2;
+    const rg = g.createRadialGradient(r, r, 0, r, r, r);
+    rg.addColorStop(0, '#FFFFFF');
+    rg.addColorStop(0.25, color + 'E6');
+    rg.addColorStop(0.6, color + '33');
+    rg.addColorStop(1, color + '00');
+    g.fillStyle = rg;
+    g.fillRect(0, 0, size, size);
+    return s;
+  }
+  function streakSprite(color) {
+    const s = document.createElement('canvas');
+    s.width = 10; s.height = 256;
+    const g = s.getContext('2d');
+    const lg = g.createLinearGradient(0, 0, 0, 256);
+    lg.addColorStop(0, color + '00');
+    lg.addColorStop(0.5, color + '55');
+    lg.addColorStop(1, color + '00');
+    g.fillStyle = lg;
+    g.fillRect(4, 0, 2, 256);
+    return s;
+  }
+  const dotSprites = COLORS.map((c) => sprite(c, 64));
+  const streakSprites = COLORS.map((c) => streakSprite(c));
+  const blobSprites = COLORS.slice(0, 3).map((c) => sprite(c, 256));
+
+  function build() {
+    const n = clamp(Math.round((w * h) / 26000), 18, REDUCED ? 26 : 64);
+    dots = Array.from({ length: n }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      size: 7 + Math.random() * 17,
+      vy: (7 + Math.random() * 15) * (REDUCED ? 0.25 : 1),
+      sway: 6 + Math.random() * 14,
+      speed: 0.12 + Math.random() * 0.3,
+      phase: Math.random() * Math.PI * 2,
+      alpha: 0.16 + Math.random() * 0.22,
+      tw: 0.4 + Math.random() * 0.8,
+      c: (Math.random() * 4) | 0,
+    }));
+    streaks = REDUCED ? [] : Array.from({ length: 6 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      len: 80 + Math.random() * 130,
+      vy: 11 + Math.random() * 15,
+      alpha: 0.05 + Math.random() * 0.06,
+      phase: Math.random() * Math.PI * 2,
+      c: (Math.random() * 4) | 0,
+    }));
+    blobs = Array.from({ length: 3 }, (_, i) => ({
+      x: Math.random() * w, y: Math.random() * h,
+      size: 360 + Math.random() * 240,
+      vx: (Math.random() - 0.5) * 7, vy: (Math.random() - 0.5) * 5,
+      alpha: 0.035 + Math.random() * 0.03,
+      c: i % 3,
+    }));
+  }
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth; h = window.innerHeight;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    build();
+  }
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    const dt = clamp((now - lastT) / 1000, 0.001, 0.05); lastT = now;
+    ctx.clearRect(0, 0, w, h);
+
+    for (const b of blobs) {
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.x < -b.size) b.x = w + b.size; if (b.x > w + b.size) b.x = -b.size;
+      if (b.y < -b.size) b.y = h + b.size; if (b.y > h + b.size) b.y = -b.size;
+      ctx.globalAlpha = b.alpha;
+      ctx.drawImage(blobSprites[b.c], b.x - b.size / 2, b.y - b.size / 2, b.size, b.size);
+    }
+    for (const s of streaks) {
+      s.y -= s.vy * dt;
+      if (s.y < -s.len - 40) { s.y = h + 40; s.x = Math.random() * w; }
+      const breathe = 0.7 + 0.3 * Math.sin(now * 0.0006 + s.phase);
+      ctx.globalAlpha = s.alpha * breathe;
+      ctx.drawImage(streakSprites[s.c], s.x - 5, s.y - s.len / 2, 10, s.len);
+    }
+    for (const d of dots) {
+      d.y -= d.vy * dt;
+      d.x += Math.sin(now * 0.001 * d.speed * 6 + d.phase) * d.sway * dt;
+      if (d.y < -24) { d.y = h + 20; d.x = Math.random() * w; }
+      const tw = 0.55 + 0.45 * Math.sin(now * 0.001 * d.tw * 2 + d.phase);
+      ctx.globalAlpha = d.alpha * tw;
+      ctx.drawImage(dotSprites[d.c], d.x - d.size / 2, d.y - d.size / 2, d.size, d.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function start() {
+    if (running) return;
+    running = true; lastT = performance.now();
+    resize();
+    raf = requestAnimationFrame(frame);
+  }
+  function stop() {
+    running = false;
+    cancelAnimationFrame(raf);
+    ctx.clearRect(0, 0, w, h);
+  }
+  window.addEventListener('resize', () => { if (running) resize(); });
+  return { start, stop };
+})();
+
+/* ============================================================
+   Error messages — human, friendly, actionable
+   ============================================================ */
+function makeError(name, detail) {
+  switch (name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+    case 'SecurityError':
+      return {
+        title: 'Camera access is required',
+        msg: 'This experience needs the camera to see your fingertips. Nothing is recorded or uploaded — every frame is processed on this device.',
+        hints: [
+          'Click the camera / lock icon in your browser address bar and set Camera to “Allow”.',
+          FRAMED
+            ? 'Embedded previews often block cameras — use OPEN IN NEW TAB below for the full experience.'
+            : 'If no prompt appeared, reload the page and try again.',
+          'Then press TRY AGAIN.',
+        ],
+      };
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return {
+        title: 'No camera found',
+        msg: 'We couldn’t find a camera on this device. Connect one and try again.',
+        hints: ['Check that a webcam is plugged in and enabled.', 'Then press TRY AGAIN.'],
+      };
+    case 'NotReadableError':
+    case 'TrackStartError':
+    case 'AbortError':
+      return {
+        title: 'Camera is busy',
+        msg: 'Another app — or a different browser tab — seems to be using the camera right now.',
+        hints: ['Close other apps or tabs using the camera.', 'Then press TRY AGAIN.'],
+      };
+    case 'ModelLoad':
+      return {
+        title: 'Couldn’t load the hand-tracking engine',
+        msg: 'The hand-tracking model is streamed from the internet the first time it runs.',
+        hints: [
+          'Check your internet connection.',
+          'If you opened this file from an offline preview, download it and open it in your browser.',
+          'Then press TRY AGAIN.',
+        ],
+      };
+    case 'NotSupported':
+      return {
+        title: 'Browser not supported',
+        msg: 'This browser doesn’t support camera access. Please use a recent version of Chrome, Edge, Firefox or Safari.',
+        hints: ['It needs camera access (getUserMedia) support.'],
+      };
+    case 'Interrupted':
+      return {
+        title: 'Camera stream interrupted',
+        msg: 'The camera stopped unexpectedly — another app may have taken it over, or the device disconnected.',
+        hints: ['Press TRY AGAIN to restart the laser system.'],
+      };
+    default:
+      return {
+        title: 'Something went wrong',
+        msg: 'An unexpected issue interrupted the experience. The lasers will work again after a quick restart.',
+        hints: ['Press TRY AGAIN.', detail ? `Details: ${detail}` : 'If it keeps happening, try reloading the page.'].filter(Boolean),
+      };
+  }
+}
+
+/* ============================================================
+   LaserEngine — camera + tracking + rendering
+   ============================================================ */
+class LaserEngine {
+  constructor(video, canvas) {
+    this.video = video;
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: true });
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.resScale = 1;
+    this.quality = 2;          // 2 = full, 1 = medium, 0 = core-only
+    this.paletteIdx = 0;
+
+    this.running = false;
+    this.raf = 0;
+    this.stream = null;
+    this.landmarker = null;
+
+    this.hands = new Map();    // key → tracked hand
+    this.tipVel = new Map();   // "hand|finger" → last position/time
+    this.tips = [];            // active extended fingertips this frame
+    this.trail = [];           // drawn laser points
+    this.sprites = new Map();  // color → glow sprite
+
+    this.parts = [];           // particle pool
+    for (let i = 0; i < 280; i++) this.parts.push({ alive: false, x: 0, y: 0, vx: 0, vy: 0, born: 0, ttl: 1, size: 6, color: '#fff' });
+    this.partCursor = 0;
+
+    this.lastVideoTime = -1;
+    this.lastT = 0;
+    this.frameCount = 0;
+    this.emaDt = 0;
+    this.fastStreak = 0;
+    this.failCount = 0;
+    this.clearAt = 0;
+
+    this.cw = 0; this.ch = 0; this.vw = 0; this.vh = 0;
+    this.tf = { s: 1, ox: 0, oy: 0 };
+
+    this.lastMode = ''; this.lastTips = -1; this.lastHand = null;
+    this.curHint = null; this.noHandSince = 0; this.fistSince = 0; this.hasDrawn = false;
+
+    this.onMode = null; this.onHint = null; this.onError = null;
+
+    this._onResize = () => this.resizeCanvas();
+    this._onMeta = () => {
+      this.vw = this.video.videoWidth || 1280;
+      this.vh = this.video.videoHeight || 720;
+      this.recalcTf();
+    };
+    this._onTrackEnded = () => {
+      if (this.running) this.emitError(makeError('Interrupted'));
+    };
+    this.loop = this.loop.bind(this);
+  }
+
+  /* ---------- lifecycle ---------- */
+  async boot(onStatus) {
+    this.dispose(); // clean slate (idempotent)
+    if (!this.ctx) { this.emitError(makeError('Runtime', 'canvas 2d unavailable')); return false; }
+    this.running = true;
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw { name: 'NotSupported' };
+
+      onStatus('REQUESTING CAMERA ACCESS');
+      this.stream = await this.openCamera();
+      const v = this.video;
+      v.srcObject = this.stream;
+      await new Promise((res) => {
+        const t = setTimeout(res, 4000);
+        v.addEventListener('loadedmetadata', () => { clearTimeout(t); res(); }, { once: true });
+      });
+      try { await v.play(); } catch (_) { /* autoplay guarded by user gesture */ }
+      this._onMeta();
+      this.stream.getVideoTracks().forEach((t) => t.addEventListener('ended', this._onTrackEnded));
+
+      onStatus('LOADING HAND-TRACKING MODEL');
+      this.landmarker = await this.loadModel();
+
+      onStatus('CALIBRATING LASER SYSTEM');
+      window.addEventListener('resize', this._onResize);
+      this.resizeCanvas();
+      await sleep(320); // let the reveal animation breathe
+      if (!this.running) return false;
+
+      this.lastT = performance.now();
+      this.raf = requestAnimationFrame(this.loop);
+      return true;
+    } catch (e) {
+      this.emitError(makeError(e && e.name, e && e.message));
+      this.dispose();
+      return false;
+    }
+  }
+
+  dispose() {
+    this.running = false;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    window.removeEventListener('resize', this._onResize);
+    if (this.stream) {
+      this.stream.getTracks().forEach((t) => { t.stop(); t.removeEventListener('ended', this._onTrackEnded); });
+      this.stream = null;
+    }
+    this.video.srcObject = null;
+    if (this.landmarker) {
+      try { const p = this.landmarker.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+      this.landmarker = null;
+    }
+    this.hands.clear();
+    this.tipVel.clear();
+    this.tips.length = 0;
+    this.trail.length = 0;
+    for (const p of this.parts) p.alive = false;
+    this.lastVideoTime = -1;
+    this.clearAt = 0;
+    this.failCount = 0;
+    this.lastMode = ''; this.lastTips = -1; this.lastHand = null;
+    this.noHandSince = 0; this.fistSince = 0; this.hasDrawn = false; this.curHint = null;
+    this.ctx && this.cw && this.ctx.clearRect(0, 0, this.cw, this.ch);
+  }
+
+  emitError(err) { if (this.onError) this.onError(err); }
+
+  /* ---------- camera ---------- */
+  async openCamera() {
+    const attempts = [
+      { audio: false, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { audio: false, video: true },
+    ];
+    let lastErr = null;
+    for (const c of attempts) {
+      try { return await navigator.mediaDevices.getUserMedia(c); }
+      catch (e) {
+        lastErr = e;
+        const n = e && e.name;
+        if (n === 'NotAllowedError' || n === 'PermissionDeniedError' || n === 'SecurityError' || n === 'NotFoundError') throw e;
+      }
+    }
+    throw lastErr || { name: 'NotReadableError' };
+  }
+
+  /* ---------- model ---------- */
+  async loadModel() {
+    let vision;
+    try {
+      vision = await import(MP_JS);
+    } catch (_) {
+      throw { name: 'ModelLoad' };
+    }
+    try {
+      const fileset = await vision.FilesetResolver.forVisionTasks(MP_WASM);
+      const opts = (delegate) => ({
+        baseOptions: { modelAssetPath: MP_MODEL, delegate },
+        runningMode: 'VIDEO',
+        numHands: 2,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      try { return await vision.HandLandmarker.createFromOptions(fileset, opts('GPU')); }
+      catch (_) { return await vision.HandLandmarker.createFromOptions(fileset, opts('CPU')); }
+    } catch (e) {
+      throw (e && e.name === 'ModelLoad') ? e : { name: 'ModelLoad', message: e && e.message };
+    }
+  }
+
+  /* ---------- geometry / canvas ---------- */
+  resizeCanvas() {
+    const w = this.canvas.clientWidth || this.canvas.parentElement.clientWidth || window.innerWidth;
+    const h = this.canvas.clientHeight || this.canvas.parentElement.clientHeight || window.innerHeight;
+    const s = this.dpr * this.resScale;
+    this.canvas.width = Math.max(2, Math.round(w * s));
+    this.canvas.height = Math.max(2, Math.round(h * s));
+    this.ctx.setTransform(s, 0, 0, s, 0, 0);
+    this.cw = w; this.ch = h;
+    this.recalcTf();
+  }
+  recalcTf() {
+    const vw = this.vw || 1280, vh = this.vh || 720;
+    const s = Math.max(this.cw / vw, this.ch / vh);
+    this.tf = { s, ox: (this.cw - vw * s) / 2, oy: (this.ch - vh * s) / 2 };
+  }
+  mapPoint(nx, ny) { // normalized video coords → mirrored canvas coords
+    const { s, ox, oy } = this.tf;
+    return [this.cw - (ox + nx * this.vw * s), oy + ny * this.vh * s];
+  }
+
+  /* ---------- per-frame loop ---------- */
+  loop(now) {
+    if (!this.running) return;
+    this.raf = requestAnimationFrame(this.loop);
+    const dtMs = this.lastT ? clamp(now - this.lastT, 4, 100) : 16;
+    this.lastT = now;
+    this.frameCount++;
+    this.emaDt = this.emaDt ? this.emaDt * 0.9 + dtMs * 0.1 : dtMs;
+    if (this.frameCount % 150 === 0) this.autoQuality();
+    try {
+      this.detect(now);
+      this.updateMode(now);
+      this.render(now, dtMs / 1000);
+    } catch (e) {
+      if (++this.failCount > 90) {
+        this.emitError(makeError('Runtime', e && e.message));
+        this.dispose();
+      }
+    }
+  }
+
+  autoQuality() {
+    if (this.emaDt > 22 && this.quality > 0) this.setQuality(this.quality - 1);
+    else if (this.emaDt < 14 && this.quality < 2) {
+      if (++this.fastStreak >= 3) { this.setQuality(this.quality + 1); this.fastStreak = 0; }
+    } else this.fastStreak = 0;
+  }
+  setQuality(q) {
+    this.quality = q;
+    this.resScale = q === 0 ? 0.8 : q === 1 ? 0.9 : 1;
+    this.resizeCanvas();
+  }
+
+  /* ---------- hand tracking ---------- */
+  detect(now) {
+    const v = this.video, lm = this.landmarker;
+    if (!lm || v.readyState < 2) { this.decayHands(now); return; }
+    if (v.currentTime === this.lastVideoTime) return;
+    this.lastVideoTime = v.currentTime;
+    let res;
+    try { res = lm.detectForVideo(v, now); } catch (_) { return; }
+    const list = (res && res.landmarks) || [];
+    // Stable identity: match each detection to the existing hand whose WRIST
+    // is nearest. (Handedness labels flip while the hand moves — keying on
+    // them used to spawn duplicate phantom hands that froze open.)
+    const used = new Set();
+    const SNAP2 = 0.35 * 0.35;
+    for (let idx = 0; idx < list.length; idx++) {
+      const lms = list[idx];
+      if (!lms || lms.length < 21) continue;
+      let key = null, bestD = Infinity;
+      for (const [k, h] of this.hands) {
+        if (used.has(k)) continue;
+        const dx = lms[0].x - h.pts[0], dy = lms[0].y - h.pts[1];
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD) { bestD = d2; key = k; }
+      }
+      if (key === null || bestD > SNAP2) {
+        key = null;
+        for (const slot of ['h0', 'h1']) {
+          const h = this.hands.get(slot);
+          if (!h || now - h.seenAt > HAND_TIMEOUT) { key = slot; break; }
+        }
+        if (key === null) key = 'h0';
+      }
+      used.add(key);
+      let hand = this.hands.get(key);
+      if (!hand) {
+        const filters = new Array(21);
+        for (let i = 0; i < 21; i++) filters[i] = [new OneEuroFilter(), new OneEuroFilter()];
+        hand = { pts: new Float32Array(42), filters, ext: [false, false, false, false, false], pending: [0, 0, 0, 0, 0], seenAt: now };
+        this.hands.set(key, hand);
+      }
+      hand.seenAt = now;
+      const p = hand.pts;
+      for (let i = 0; i < 21; i++) {
+        p[i * 2] = hand.filters[i][0].filter(lms[i].x, now);
+        p[i * 2 + 1] = hand.filters[i][1].filter(lms[i].y, now);
+      }
+      this.updateExtension(hand);
+    }
+    this.decayHands(now);
+  }
+
+  decayHands(now) {
+    for (const [k, h] of this.hands) if (now - h.seenAt > HAND_TIMEOUT) this.hands.delete(k);
+  }
+
+  /* A finger counts as OPEN only when THREE independent signals agree:
+     1) reach ratio — dist(mcp→tip) vs dist(mcp→pip) (~2x straight, ~1x curled)
+     2) direction — pip→tip must keep pointing away from the knuckle
+     3) radial rule — the tip must be farther from the WRIST than the pip
+        joint is (a curled tip always folds back toward the palm/wrist)
+     A 3-frame vote + hysteresis keeps the state stable. */
+  updateExtension(h) {
+    const p = h.pts;
+    const d2 = (a, b) => {
+      const dx = p[a * 2] - p[b * 2], dy = p[a * 2 + 1] - p[b * 2 + 1];
+      return dx * dx + dy * dy;
+    };
+    for (let f = 0; f < 5; f++) {
+      const mcp = MCP_IDS[f], pip = PIP_IDS[f], tip = TIP_IDS[f];
+      const uLen = Math.max(1e-9, Math.sqrt(d2(mcp, pip)));
+      const reach = Math.sqrt(d2(mcp, tip)) / uLen;
+      const ux = p[pip * 2] - p[mcp * 2], uy = p[pip * 2 + 1] - p[mcp * 2 + 1];
+      const wx = p[tip * 2] - p[pip * 2], wy = p[tip * 2 + 1] - p[pip * 2 + 1];
+      const dot = (ux * wx + uy * wy) / (uLen * Math.max(1e-9, Math.hypot(wx, wy)));
+      let raw;
+      if (f === 0) {
+        // thumb out = tip reaches beyond its knuckle toward the pinky side
+        const spread = d2(tip, 17) > d2(mcp, 17) * 1.15;
+        raw = h.ext[0]
+          ? !(reach < 1.18 || dot < 0.12 || !spread)
+          : (reach > 1.42 && dot > 0.42 && spread);
+      } else {
+        const out = d2(tip, 0) > d2(pip, 0) * 1.05; // radial rule vs wrist
+        raw = h.ext[f]
+          ? !(reach < 1.34 || dot < 0.38 || !out)
+          : (reach > 1.58 && dot > 0.62 && out);
+      }
+      if (raw !== h.ext[f]) {
+        if (++h.pending[f] >= 3) { h.ext[f] = raw; h.pending[f] = 0; }
+      } else h.pending[f] = 0;
+    }
+  }
+
+  /* ---------- mode logic ---------- */
+  updateMode(now) {
+    this.tips.length = 0;
+    for (const [key, hand] of this.hands) {
+      if (now - hand.seenAt > 150) continue; // stale hand — emit nothing
+      for (let f = 0; f < 5; f++) {
+        if (!hand.ext[f]) continue;
+        const ti = TIP_IDS[f];
+        const [mx, my] = this.mapPoint(hand.pts[ti * 2], hand.pts[ti * 2 + 1]);
+        const vk = key + '|' + f;
+        const prev = this.tipVel.get(vk);
+        let vx = 0, vy = 0;
+        if (prev && now > prev.t && now - prev.t < 250) {
+          vx = clamp((mx - prev.x) / ((now - prev.t) / 1000), -4000, 4000);
+          vy = clamp((my - prev.y) / ((now - prev.t) / 1000), -4000, 4000);
+        }
+        this.tipVel.set(vk, { x: mx, y: my, t: now });
+        this.tips.push({ x: mx, y: my, f, hand: key, vx, vy, seenAt: now, rx: mx, ry: my });
+      }
+    }
+    if (this.tips.length > 12) this.tips.length = 12;
+
+    // extrapolate between detections for 60fps-feeling pens
+    for (const t of this.tips) {
+      const dts = clamp((now - t.seenAt) / 1000, 0, 0.05);
+      t.rx = t.x + t.vx * dts;
+      t.ry = t.y + t.vy * dts;
+    }
+
+    const n = this.tips.length;
+    const hasHand = this.hands.size > 0;
+    const mode = n === 0 ? 'none' : n === 1 ? 'draw' : 'network';
+
+    if (mode === 'draw') {
+      const t = this.tips[0];
+      const color = PALETTES[this.paletteIdx].colors[t.f];
+      const last = this.trail[this.trail.length - 1];
+      const dd = last ? Math.hypot(t.rx - last.x, t.ry - last.y) : Infinity;
+      const dtt = last ? now - last.t : Infinity;
+      if (!last || dd > 2 || (dtt > 90 && dd > 0.75)) {
+        this.trail.push({ x: t.rx, y: t.ry, c: color, t: now });
+        if (this.trail.length > MAX_TRAIL) this.trail.splice(0, this.trail.length - MAX_TRAIL);
+      }
+      this.hasDrawn = true;
+    }
+    if (this.frameCount % 240 === 0) this.compactTrail(now);
+
+    if (mode !== this.lastMode || n !== this.lastTips || hasHand !== this.lastHand) {
+      this.lastMode = mode; this.lastTips = n; this.lastHand = hasHand;
+      const activeColor = mode === 'draw' ? PALETTES[this.paletteIdx].colors[this.tips[0].f] : null;
+      if (this.onMode) this.onMode(mode, n, hasHand, activeColor);
+    }
+    this.updateHint(now, mode, hasHand, n);
+  }
+
+  compactTrail(now) {
+    if (!this.trail.length) return;
+    let firstAlive = this.trail.length;
+    for (let i = 0; i < this.trail.length; i++) {
+      if (now - this.trail[i].t < TRAIL_LIFE) { firstAlive = i; break; }
+    }
+    if (firstAlive > 0) this.trail.splice(0, firstAlive);
+  }
+
+  updateHint(now, mode, hasHand, n) {
+    if (!hasHand) this.noHandSince = this.noHandSince || now;
+    else this.noHandSince = 0;
+    if (hasHand && n === 0) this.fistSince = this.fistSince || now;
+    else this.fistSince = 0;
+    let hint = null;
+    if (this.noHandSince && now - this.noHandSince > 4000) hint = 'SHOW YOUR HAND TO THE CAMERA';
+    else if (!this.hasDrawn && this.fistSince && now - this.fistSince > 4000) hint = 'RAISE ONE FINGER TO DRAW · SEVERAL TO CONNECT';
+    if (hint !== this.curHint) {
+      this.curHint = hint;
+      if (this.onHint) this.onHint(hint);
+    }
+  }
+
+  clearTrail() {
+    if (this.trail.length) this.clearAt = performance.now();
+  }
+  setPalette(i) { this.paletteIdx = i % PALETTES.length; }
+
+  /* ---------- rendering ---------- */
+  sprite(color) {
+    let s = this.sprites.get(color);
+    if (!s) {
+      s = document.createElement('canvas');
+      s.width = s.height = 128;
+      const g = s.getContext('2d');
+      const [r, gg, b] = rgbOf(color);
+      const rg = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      rg.addColorStop(0, 'rgba(255,255,255,1)');
+      rg.addColorStop(0.13, `rgba(${r},${gg},${b},0.95)`);
+      rg.addColorStop(0.38, `rgba(${r},${gg},${b},0.34)`);
+      rg.addColorStop(1, `rgba(${r},${gg},${b},0)`);
+      g.fillStyle = rg;
+      g.fillRect(0, 0, 128, 128);
+      this.sprites.set(color, s);
+    }
+    return s;
+  }
+
+  render(now, dt) {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.cw, this.ch);
+    if (!this.cw) return;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    this.drawTrail(ctx, now);
+    if (this.tips.length >= 2) this.drawNetwork(ctx, now);
+    this.spawnParticles(now);
+    this.drawParticles(ctx, now, dt);
+    this.drawTips(ctx, now);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  drawTrail(ctx, now) {
+    const pts = this.trail;
+    if (!pts.length) return;
+    const q = this.quality;
+
+    let fadeMul = 1;
+    if (this.clearAt) {
+      fadeMul = 1 - (now - this.clearAt) / 650;
+      if (fadeMul <= 0.01) { pts.length = 0; this.clearAt = 0; return; }
+    }
+
+    const start = Math.max(1, pts.length - MAX_RENDER);
+    let lastColor = null;
+    for (let i = start; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if (b.t - a.t > 400) continue;                    // stroke break (pen lifted)
+      if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) > 220) continue; // teleport jump
+      const rem = 1 - (now - b.t) / TRAIL_LIFE;
+      if (rem <= 0) continue;
+      let al = rem < 0.45 ? rem / 0.45 : 1;
+      al = al * al * (3 - 2 * al) * fadeMul;
+      if (al <= 0.01) continue;
+
+      const col = b.c;
+      if (col !== lastColor) { ctx.strokeStyle = col; lastColor = col; }
+
+      if (q >= 1) { ctx.globalAlpha = 0.05 * al; ctx.lineWidth = 16; this.seg(ctx, a, b); }
+      ctx.globalAlpha = 0.22 * al; ctx.lineWidth = 6.5; this.seg(ctx, a, b);
+      ctx.globalAlpha = 0.95 * al; ctx.lineWidth = 2.5; this.seg(ctx, a, b);
+      if (q >= 2) {
+        ctx.globalAlpha = 0.5 * al; ctx.lineWidth = 1; ctx.strokeStyle = '#FFFFFF'; this.seg(ctx, a, b);
+        ctx.strokeStyle = col; // restore (lastColor still valid)
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  seg(ctx, a, b) {
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  drawNetwork(ctx, now) {
+    const tips = this.tips;
+    const q = this.quality;
+    const diag = Math.hypot(this.cw, this.ch);
+    const far = diag * 0.6;
+    const pal = PALETTES[this.paletteIdx].colors;
+
+    for (let i = 0; i < tips.length; i++) {
+      const A = tips[i];
+      for (let j = i + 1; j < tips.length; j++) {
+        const B = tips[j];
+        const dx = B.rx - A.rx, dy = B.ry - A.ry;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 2) continue;
+        // full brightness at any distance — only extreme reach is skipped
+        if (A.hand !== B.hand && dist > far) continue;
+        const aMul = 1;
+        const cA = pal[A.f], cB = pal[B.f];
+        const grad = ctx.createLinearGradient(A.rx, A.ry, B.rx, B.ry);
+        grad.addColorStop(0, cA);
+        grad.addColorStop(1, cB);
+
+        // gentle organic sag
+        const px = -dy / dist, py = dx / dist;
+        const amp = Math.min(16, dist * 0.07) * (0.55 + 0.45 * Math.sin(now * 0.0012 + i * 1.7 + j * 0.9));
+        const cx = (A.rx + B.rx) / 2 + px * amp;
+        const cy = (A.ry + B.ry) / 2 + py * amp;
+
+        const flick = 0.9 + 0.1 * Math.sin(now * 0.02 + (i * 3 + j) * 1.3);
+        ctx.strokeStyle = grad;
+        const curve = () => {
+          ctx.beginPath();
+          ctx.moveTo(A.rx, A.ry);
+          ctx.quadraticCurveTo(cx, cy, B.rx, B.ry);
+          ctx.stroke();
+        };
+        if (q >= 1) { ctx.globalAlpha = 0.09 * aMul; ctx.lineWidth = 14; curve(); }
+        ctx.globalAlpha = 0.3 * aMul * flick; ctx.lineWidth = 5; curve();
+        ctx.globalAlpha = 1 * aMul * flick; ctx.lineWidth = 2; curve();
+        if (q >= 2) {
+          ctx.globalAlpha = 0.7 * aMul * flick; ctx.lineWidth = 0.8; ctx.strokeStyle = '#FFFFFF'; curve();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawTips(ctx, now) {
+    const pal = PALETTES[this.paletteIdx].colors;
+    const single = this.tips.length === 1;
+    for (const t of this.tips) {
+      const color = pal[t.f];
+      const size = single ? 52 : 36;
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(this.sprite(color), t.rx - size / 2, t.ry - size / 2, size, size);
+      if (!single) { // subtle ring around web nodes
+        ctx.globalAlpha = 0.2;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(t.rx, t.ry, 9, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(t.rx, t.ry, single ? 2.6 : 2.1, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    void now;
+  }
+
+  /* ---------- particles ---------- */
+  spawnParticles(now) {
+    if (this.quality === 0 || !this.tips.length) return;
+    const rate = this.tips.length === 1 ? 0.85 : 0.45 * (this.quality === 1 ? 0.55 : 1);
+    const pal = PALETTES[this.paletteIdx].colors;
+    for (const t of this.tips) {
+      if (Math.random() > rate) continue;
+      const p = this.parts[this.partCursor];
+      this.partCursor = (this.partCursor + 1) % this.parts.length;
+      p.alive = true;
+      p.x = t.rx; p.y = t.ry;
+      p.vx = t.vx * 0.22 + (Math.random() - 0.5) * 32;
+      p.vy = t.vy * 0.22 + (Math.random() - 0.5) * 32 - 14;
+      p.born = now;
+      p.ttl = 520 + Math.random() * 640;
+      p.size = 5 + Math.random() * 5;
+      p.color = pal[t.f];
+    }
+  }
+
+  drawParticles(ctx, now, dt) {
+    for (const p of this.parts) {
+      if (!p.alive) continue;
+      const age = (now - p.born) / p.ttl;
+      if (age >= 1) { p.alive = false; continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= 0.985; p.vy = p.vy * 0.985 - 6 * dt;
+      const a = Math.pow(1 - age, 1.6) * 0.85;
+      const s = p.size * (0.55 + 0.45 * (1 - age));
+      ctx.globalAlpha = a;
+      ctx.drawImage(this.sprite(p.color), p.x - s / 2, p.y - s / 2, s, s);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ============================================================
+   UI wiring — flow between screens
+   ============================================================ */
+const landing = $('landing');
+const experience = $('experience');
+const flash = $('flash');
+const boot = $('boot');
+const bootStatus = $('bootStatus');
+const errorBox = $('error');
+const errTitle = $('errTitle');
+const errMsg = $('errMsg');
+const errHints = $('errHints');
+const retryBtn = $('retryBtn');
+const newTabBtn = $('newTabBtn');
+const backBtn = $('backBtn');
+const hintEl = $('hint');
+const pillText = $('pillText');
+const pillDot = $('pillDot');
+const liveDot = $('liveDot');
+const paletteBtn = $('paletteBtn');
+const paletteDots = $('paletteDots');
+const clearBtn = $('clearBtn');
+const exitBtn = $('exitBtn');
+const veil = $('veil');
+
+let engine = null;
+let launching = false;
+let exiting = false;
+let paletteIdx = 0;
+
+function renderPaletteDots() {
+  paletteDots.innerHTML = '';
+  for (const c of PALETTES[paletteIdx].colors) {
+    const i = document.createElement('i');
+    i.style.background = c;
+    i.style.boxShadow = `0 0 8px ${c}`;
+    paletteDots.appendChild(i);
+  }
+}
+
+function setBootStatus(s) { bootStatus.textContent = s; }
+
+function showBoot() {
+  errorBox.hidden = true;
+  boot.hidden = false;
+  boot.classList.remove('hide');
+  setBootStatus('PREPARING CAMERA');
+}
+
+function uiMode(mode, n, hasHand, activeColor) {
+  liveDot.classList.toggle('on', hasHand);
+  let text, dot;
+  if (mode === 'draw') { text = 'LASER PEN'; dot = activeColor || '#22D3EE'; }
+  else if (mode === 'network') { text = `LASER WEB · ${n} POINTS`; dot = '#FFFFFF'; }
+  else { text = hasHand ? 'STANDBY' : 'AWAITING HAND'; dot = 'rgba(255,255,255,0.3)'; }
+  if (pillText.textContent !== text) pillText.textContent = text;
+  pillDot.style.background = dot;
+  pillDot.style.boxShadow = dot === 'rgba(255,255,255,0.3)' ? 'none' : `0 0 10px ${dot}`;
+}
+
+function uiHint(h) {
+  if (h) {
+    if (hintEl.textContent !== h) hintEl.textContent = h;
+    hintEl.classList.add('show');
+  } else {
+    hintEl.classList.remove('show');
+  }
+}
+
+function uiError(err) {
+  boot.hidden = true;
+  experience.classList.remove('live');
+  errTitle.textContent = err.title;
+  errMsg.textContent = err.msg;
+  errHints.innerHTML = '';
+  for (const h of err.hints) {
+    const li = document.createElement('li');
+    li.textContent = h;
+    errHints.appendChild(li);
+  }
+  newTabBtn.hidden = !FRAMED;
+  if (FRAMED) newTabBtn.href = window.location.href;
+  errorBox.hidden = false;
+}
+
+async function startExperience() {
+  showBoot();
+  if (engine) { engine.dispose(); engine = null; }
+  engine = new LaserEngine($('cam'), $('fx'));
+  engine.onMode = uiMode;
+  engine.onHint = uiHint;
+  engine.onError = uiError;
+  const ok = await engine.boot(setBootStatus);
+  if (ok && engine) {
+    boot.classList.add('hide');
+    setTimeout(() => { boot.hidden = true; boot.classList.remove('hide'); }, 900);
+    experience.classList.add('live');
+  }
+}
+
+function launch() {
+  if (launching) return;
+  launching = true;
+  Dust.stop();
+  landing.classList.add('leaving');
+  flash.classList.remove('go');
+  void flash.offsetWidth;
+  flash.classList.add('go');
+  setTimeout(() => {
+    landing.hidden = true;
+    landing.classList.remove('leaving');
+    experience.hidden = false;
+    requestAnimationFrame(() => experience.classList.add('on'));
+    startExperience();
+    launching = false;
+  }, 720);
+}
+
+function exitToLanding() {
+  if (exiting) return;
+  exiting = true;
+  veil.classList.add('on');
+  setTimeout(() => {
+    if (engine) { engine.dispose(); engine = null; }
+    experience.classList.remove('on', 'live');
+    boot.hidden = true; boot.classList.remove('hide');
+    errorBox.hidden = true;
+    uiHint(null);
+    liveDot.classList.remove('on');
+    pillText.textContent = 'AWAITING HAND';
+    pillDot.style.background = 'rgba(255,255,255,0.3)';
+    pillDot.style.boxShadow = 'none';
+    experience.hidden = true;
+    veil.classList.remove('on');
+    landing.hidden = false;
+    landing.classList.remove('entering');
+    void landing.offsetWidth;
+    landing.classList.add('entering');
+    Dust.start();
+    exiting = false;
+  }, 620);
+}
+
+/* ---------- controls ---------- */
+$('start').addEventListener('click', launch);
+
+exitBtn.addEventListener('click', exitToLanding);
+backBtn.addEventListener('click', exitToLanding);
+retryBtn.addEventListener('click', () => { startExperience(); });
+
+clearBtn.addEventListener('click', () => {
+  if (engine) engine.clearTrail();
+  clearBtn.classList.remove('pulse');
+  void clearBtn.offsetWidth;
+  clearBtn.classList.add('pulse');
+});
+
+paletteBtn.addEventListener('click', () => {
+  paletteIdx = (paletteIdx + 1) % PALETTES.length;
+  if (engine) engine.setPalette(paletteIdx);
+  renderPaletteDots();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (experience.hidden || exiting) return;
+  const k = e.key.toLowerCase();
+  if (k === 'escape' || k === 'x') { exitToLanding(); return; }
+  if (boot.hidden === false || errorBox.hidden === false) return;
+  if (k === 'c') clearBtn.click();
+  else if (k === 'p') paletteBtn.click();
+});
+
+/* ---------- global safety net (never show raw errors) ---------- */
+let fatalErrorShown = false;
+function globalFail(msg) {
+  if (!experience.hidden && !fatalErrorShown) {
+    fatalErrorShown = true;
+    uiError(makeError('Runtime', msg));
+  }
+}
+window.addEventListener('error', (e) => globalFail(e.message));
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason;
+  globalFail(r && r.message ? r.message : 'unhandled promise rejection');
+});
+
+/* ---------- go ---------- */
+renderPaletteDots();
+Dust.start();
+</script>
+</body>
+</html>
